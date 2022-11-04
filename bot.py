@@ -1,6 +1,9 @@
 import logging
 import logging.config
 
+from database.broadcast_db import filter_broadcast
+from plugins.broadcast import resume_broadcast
+
 # Get logging configurations
 logging.config.fileConfig('logging.conf')
 logging.getLogger().setLevel(logging.INFO)
@@ -39,9 +42,13 @@ class Bot(Client):
         temp.ME = me.id
         temp.U_NAME = me.username
         temp.B_NAME = me.first_name
-        self.username = '@' + me.username
+        self.username = f'@{me.username}'
         logging.info(f"{me.first_name} with for Pyrogram v{__version__} (Layer {layer}) started on {me.username}.")
         logging.info(LOG_STR)
+
+        ongoing_broadcast = await filter_broadcast({"ongoing":True})
+        for broadcast in ongoing_broadcast:
+            await resume_broadcast(self, broadcast["broadcast_id"])
 
     async def stop(self, *args):
         await super().stop()
