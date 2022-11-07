@@ -21,7 +21,7 @@ async def verupikkals(bot, message: types.Message):
         print(e)
 
 @Client.on_message(filters.command("stop_broadcast") & filters.user(ADMINS))
-async def verupikkals(bot, message: types.Message):
+async def stop_broadcast(bot, message: types.Message):
     cmd = message.command
     if len(cmd) == 1:
         return await message.reply("`/stop_broadcast broadcast_id`")
