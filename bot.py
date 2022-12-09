@@ -46,15 +46,21 @@ class Bot(Client):
         self.username = f'@{me.username}'
         logging.info(f"{me.first_name} with for Pyrogram v{__version__} (Layer {layer}) started on {me.username}.")
         logging.info(LOG_STR)
-
-        ongoing_broadcast = await filter_broadcast({"ongoing":True})
-        for broadcast in ongoing_broadcast:
-            await resume_broadcast(self, broadcast["broadcast_id"])
-
+        
+        
         app = web.AppRunner(await web_server())
         await app.setup()
         bind_address = "0.0.0.0"
         await web.TCPSite(app, bind_address, 8000).start()
+        logging.info("Web Server Started")
+        
+        
+        ongoing_broadcast = await filter_broadcast({"ongoing":True})
+        logging.info("Resuming Broadcast....")
+        for broadcast in ongoing_broadcast:
+            await resume_broadcast(self, broadcast["broadcast_id"])
+
+
         
     async def stop(self, *args):
         await super().stop()
