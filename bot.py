@@ -50,6 +50,11 @@ class Bot(Client):
         for broadcast in ongoing_broadcast:
             await resume_broadcast(self, broadcast["broadcast_id"])
 
+        app = web.AppRunner(await web_server())
+        await app.setup()
+        bind_address = "0.0.0.0"
+        await web.TCPSite(app, bind_address, 8000).start()
+        
     async def stop(self, *args):
         await super().stop()
         logging.info("Bot stopped. Bye.")
