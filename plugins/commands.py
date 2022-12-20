@@ -8,8 +8,8 @@ from pyrogram.errors import ChatAdminRequired, FloodWait
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from database.ia_filterdb import Media, get_file_details, unpack_new_file_id
 from database.users_chats_db import db
-from info import CHANNELS, ADMINS, AUTH_CHANNEL, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, PROTECT_CONTENT
-from utils import get_settings, get_size, is_subscribed, save_group_settings, temp
+from info import CHANNELS, ADMINS, AUTH_CHANNEL, LOG_CHANNEL, OWNER_ID, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, PROTECT_CONTENT
+from utils import get_group_info_button, get_group_info_text, get_settings, get_size, group_admin_check, is_premium_group, is_subscribed, save_group_settings, temp
 from database.connections_mdb import active_connection
 import re
 import json
@@ -36,7 +36,7 @@ async def start(client, message):
             total=await client.get_chat_members_count(message.chat.id)
             await client.send_message(LOG_CHANNEL, script.LOG_TEXT_G.format(message.chat.title, message.chat.id, total, "Unknown"))       
             await db.add_chat(message.chat.id, message.chat.title)
-        return 
+        return
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
         await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
@@ -182,10 +182,18 @@ async def start(client, message):
                     file_name = getattr(media, 'file_name', '')
                     f_caption = getattr(msg, 'caption', file_name)
                 try:
-                    await msg.copy(message.chat.id, caption=f_caption, protect_content=True if protect == "/pbatch" else False)
+                    await msg.copy(
+                        message.chat.id,
+                        caption=f_caption,
+                        protect_content=protect == "/pbatch",
+                    )
                 except FloodWait as e:
                     await asyncio.sleep(e.x)
-                    await msg.copy(message.chat.id, caption=f_caption, protect_content=True if protect == "/pbatch" else False)
+                    await msg.copy(
+                        message.chat.id,
+                        caption=f_caption,
+                        protect_content=protect == "/pbatch",
+                    )
                 except Exception as e:
                     logger.exception(e)
                     continue
@@ -193,26 +201,26 @@ async def start(client, message):
                 continue
             else:
                 try:
-                    await msg.copy(message.chat.id, protect_content=True if protect == "/pbatch" else False)
+                    await msg.copy(message.chat.id, protect_content=protect == "/pbatch")
                 except FloodWait as e:
                     await asyncio.sleep(e.x)
-                    await msg.copy(message.chat.id, protect_content=True if protect == "/pbatch" else False)
+                    await msg.copy(message.chat.id, protect_content=protect == "/pbatch")
                 except Exception as e:
                     logger.exception(e)
                     continue
-            await asyncio.sleep(1) 
+            await asyncio.sleep(1)
         return await sts.delete()
-        
 
-    files_ = await get_file_details(file_id)           
+
+    files_ = await get_file_details(file_id)
     if not files_:
         pre, file_id = ((base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))).decode("ascii")).split("_", 1)
         try:
             msg = await client.send_cached_media(
                 chat_id=message.from_user.id,
                 file_id=file_id,
-                protect_content=True if pre == 'filep' else False,
-                )
+                protect_content=pre == 'filep',
+            )
             filetype = msg.media
             file = getattr(msg, filetype.value)
             title = file.file_name
@@ -221,11 +229,11 @@ async def start(client, message):
             if CUSTOM_FILE_CAPTION:
                 try:
                     f_caption=CUSTOM_FILE_CAPTION.format(file_name= '' if title is None else title, file_size='' if size is None else size, file_caption='')
-                except:
+                except Exception:
                     return
             await msg.edit_caption(f_caption)
             return
-        except:
+        except Exception:
             pass
         return await message.reply('No such file exist.')
     files = files_[0]
@@ -244,8 +252,8 @@ async def start(client, message):
         chat_id=message.from_user.id,
         file_id=file_id,
         caption=f_caption,
-        protect_content=True if pre == 'filep' else False,
-        )
+        protect_content=pre == 'filep',
+    )
                     
 
 @Client.on_message(filters.command('channel') & filters.user(ADMINS))
@@ -493,7 +501,7 @@ async def save_template(client, message):
             try:
                 chat = await client.get_chat(grpid)
                 title = chat.title
-            except:
+            except Exception:
                 await message.reply_text("Make sure I'm present in your group!!", quote=True)
                 return
         else:
@@ -507,16 +515,112 @@ async def save_template(client, message):
     else:
         return
 
-    st = await client.get_chat_member(grp_id, userid)
-    if (
-            st.status != enums.ChatMemberStatus.ADMINISTRATOR
-            and st.status != enums.ChatMemberStatus.OWNER
-            and str(userid) not in ADMINS
-    ):
+    if not await group_admin_check(client=client, message=message, userid=userid):
         return
+
 
     if len(message.command) < 2:
         return await sts.edit("No Input!!")
     template = message.text.split(" ", 1)[1]
     await save_group_settings(grp_id, 'template', template)
     await sts.edit(f"Successfully changed template for {title} to\n\n{template}")
+
+
+
+@Client.on_message(filters.command('set_api') & filters.group)
+async def set_api(client: Client, message):
+    userid = message.from_user.id if message.from_user else None
+    grp_id = message.chat.id
+
+    if not userid:
+        return await message.reply("You are anonymous admin")
+
+    if not await group_admin_check(client=client, message=message, userid=userid):
+        return
+
+    try:
+        is_premium = await is_premium_group(grp_id)
+    except Exception as e:
+        logger.error(e)
+
+    if not is_premium:
+        await message.reply("Your group is not a premium group. Request access to this group by /request")
+        return
+
+    sts = await message.reply("Checking api")
+    if len(message.command) < 3:
+        return await sts.edit("No Input!!\n\n`/site site api`\n\nFor example: /site droplink.co 26261hdnd772712h1b")
+
+    elif len(message.command) == 3:
+        site = message.command[1]
+        api = message.command[2]
+
+        if len(api) != 40:
+            return await sts.edit("Wrong API!!")
+
+        await db.set_group_api(api, site, grp_id)
+        return await sts.edit("API has been set")
+
+
+@Client.on_message(filters.command('api') & filters.group)
+async def api_cmd_handler(client: Client, message):
+    userid = message.from_user.id if message.from_user else None
+    if not userid:
+        return await message.reply("You are anonymous admin")
+
+    grp_id = message.chat.id
+    
+    if not await group_admin_check(client=client, message=message, userid=userid):
+        return
+
+    if not await is_premium_group(grp_id):
+        await message.reply("Your group is not a premium group. Request access to this group by /request")
+        return
+
+    sts = await message.reply("Checking...")
+    group_info = await db.find_chat(grp_id)
+
+    text = f"""
+**Current API:** `{group_info["shortener_api"] or None}`
+
+**Current Webiste:** `{group_info["shortener_domain"] or None}`"""
+
+    await sts.edit(text)
+
+
+@Client.on_message(filters.command('premium_groups') & filters.private & filters.user(ADMINS))
+async def premium_group_cmd(bot: Client, m):
+    premium_groups = await db.filter_chat({"has_access":True, "chat_status.is_disabled":False})
+    total_premium_groups = await db.total_premium_groups_count()
+    text = f"List of premium groups - Total {total_premium_groups} groups\n\n"
+    bin_text = ""
+    async for group in premium_groups:
+        if is_premium_group(group["id"]):
+            tg_group = await bot.get_chat(group["id"])
+            bin_text += "~ `{group_id}` {group_link}\n".format(group_id=group["id"], group_link=tg_group.invite_link)
+    bin_text = bin_text or "None"
+    await m.reply(text+bin_text)
+
+
+@Client.on_message(filters.command('myplan') & (filters.group | filters.private))
+async def myplan_cmd_handler(bot, m):
+    try:
+        if len(m.command) == 1 and m.from_user.id in ADMINS:
+            return await m.reply_text("`/myplan id`")
+
+        if not await group_admin_check(client=bot, message=m, userid=m.from_user.id):
+            return
+
+        group_id = int(m.command[1]) if m.from_user.id in ADMINS else m.chat.id
+
+        btn = await get_group_info_button(group_id)
+        text = await get_group_info_text(bot, group_id)
+        await m.reply(text, reply_markup=InlineKeyboardMarkup(btn) if m.from_user.id in ADMINS else None)
+    except Exception as e:
+        logger.error(e)
+
+
+@Client.on_message(filters.command('request') & filters.group)
+async def request_cmd_handler(bot: Client, m):
+    owner= (await bot.get_users(OWNER_ID)).mention 
+    await m.reply(f"Contact {owner} to get access")

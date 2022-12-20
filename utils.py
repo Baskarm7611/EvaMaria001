@@ -1,10 +1,11 @@
 import logging
 from pyrogram.errors import InputUserDeactivated, UserNotParticipant, FloodWait, UserIsBlocked, PeerIdInvalid
-from info import AUTH_CHANNEL, LONG_IMDB_DESCRIPTION, MAX_LIST_ELM
+from info import ADMINS, AUTH_CHANNEL, LONG_IMDB_DESCRIPTION, MAX_LIST_ELM, VALIDITY
 from imdb import IMDb
 import asyncio
+import contextlib
 from pyrogram.types import Message, InlineKeyboardButton
-from pyrogram import enums
+from pyrogram import enums, Client
 from typing import Union
 import re
 import os
@@ -13,6 +14,8 @@ from typing import List
 from database.users_chats_db import db
 from bs4 import BeautifulSoup
 import requests
+from shortzy import Shortzy
+from plugins.human_time import human_time
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -28,7 +31,6 @@ SMART_OPEN = '“'
 SMART_CLOSE = '”'
 START_CHAR = ('\'', '"', SMART_OPEN)
 
-# temp db for banned 
 class temp(object):
     BANNED_USERS = []
     BANNED_CHATS = []
@@ -39,6 +41,7 @@ class temp(object):
     U_NAME = None
     B_NAME = None
     SETTINGS = {}
+    SHORTENED_LINK = {}
 
 async def is_subscribed(bot, query):
     try:
@@ -226,7 +229,7 @@ def extract_user(message: Message) -> Union[int, str]:
             len(message.entities) > 1 and
             message.entities[1].type == enums.MessageEntityType.TEXT_MENTION
         ):
-           
+
             required_entity = message.entities[1]
             user_id = required_entity.user.id
             user_first_name = required_entity.user.first_name
@@ -234,10 +237,8 @@ def extract_user(message: Message) -> Union[int, str]:
             user_id = message.command[1]
             # don't want to make a request -_-
             user_first_name = user_id
-        try:
+        with contextlib.suppress(ValueError):
             user_id = int(user_id)
-        except ValueError:
-            pass
     else:
         user_id = message.from_user.id
         user_first_name = message.from_user.first_name
@@ -373,4 +374,107 @@ def humanbytes(size):
     while size > power:
         size /= power
         n += 1
-    return str(round(size, 2)) + " " + Dic_powerN[n] + 'B'
+    return f"{str(round(size, 2))} {Dic_powerN[n]}B"
+
+
+async def _update_existing_users():
+    filters = {
+        'shortener_api': {"$exists" : False},
+        'shortener_domain': {"$exists" : False}, 
+        'access_days': {"$exists" : False}, 
+        'last_verified': {"$exists" : False},
+        'has_access': {"$exists" : False}
+        }
+
+    update = {
+        "$set": 
+    {
+        'shortener_api': None, 
+        'shortener_domain': None, 
+        'access_days':0, 
+        'last_verified':datetime(2020, 5, 17),
+        'has_access':False,
+    }
+    }
+    await db.update_existing_groups(filters, update)
+
+async def group_admin_check(client, userid, message):
+
+    if userid in ADMINS:
+        return True
+
+    grp_id = message.chat.id
+    st = await client.get_chat_member(grp_id, userid)
+    if st.status not in [
+        enums.ChatMemberStatus.ADMINISTRATOR,
+        enums.ChatMemberStatus.OWNER,
+    ]:
+        return
+
+    return True
+
+async def get_group_admins(client: Client, group_id):
+    administrators = []
+    async for m in client.get_chat_members(group_id, filter=enums.ChatMembersFilter.ADMINISTRATORS):
+        None if m.user.is_bot else administrators.append(m.user.id)
+
+    return administrators
+
+async def get_group_info_text(client, group_id: int):
+    txt = """**User ID:** `{group_id}`
+**Group Link:** {group_link}
+**Subscription Date:** `{subscription_date}`
+**Expiry Date:** `{expiry_date}`
+**Subscription Peroid Remaining:** `{time_remaining}`
+**Banned:** `{banned_status}`
+    """
+
+    group = await db.find_chat(group_id)
+    expiry_date_str, time_remaining = await db.expiry_date(group_id)
+    subscription_date = group['last_verified'] if group["has_access"] else None
+
+    if group["has_access"] == False or not await db.is_group_verified(group_id):
+        await db.update_group_info(group_id, {"has_access": False})
+        subscription_date = expiry_date_str = time_remaining = "Expired"
+
+    tg_group = await client.get_chat(group_id)
+    return txt.format(
+        group_id=group_id,
+        group_link=tg_group.invite_link,
+        subscription_date=subscription_date,
+        expiry_date=expiry_date_str,
+        time_remaining=human_time(time_remaining)
+        if type(time_remaining) is int
+        else time_remaining,
+        banned_status=group["chat_status"]["is_disabled"],
+    )
+
+
+async def get_group_info_button(group_id: int):
+    btn = [[InlineKeyboardButton(text=f"Add {human_time(time_in_s)}", callback_data=f'validity#{group_id}#{time_in_s}')] for time_in_s in VALIDITY]
+    btn.append([InlineKeyboardButton("Remove access", callback_data=f"removeaccess#{group_id}")])
+    btn.append([InlineKeyboardButton("Close", callback_data="delete")])
+    return btn
+
+
+async def short_link(group, link):
+    api_key = group["shortener_api"]
+    base_site = group["shortener_domain"]
+
+    if bool(api_key and base_site):
+        if short_link := temp.SHORTENED_LINK.get(link):
+            return short_link
+
+        shortzy = Shortzy(api_key, base_site)
+        short_link = await shortzy.convert(link, silently_fail=True)
+        temp.SHORTENED_LINK[link] = short_link
+        return short_link
+    else:
+        return link
+
+async def is_premium_group(group_id):
+    group = await db.find_chat(group_id)
+
+    return bool(
+        group["has_access"] != False and await db.is_group_verified(group_id)
+    )

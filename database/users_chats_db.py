@@ -1,6 +1,8 @@
 # https://github.com/odysseusmax/animated-lamp/blob/master/bot/database/database.py
+import time
 import motor.motor_asyncio
 from info import DATABASE_NAME, DATABASE_URI, IMDB, IMDB_TEMPLATE, MELCOW_NEW_USERS, P_TTI_SHOW_OFF, SINGLE_BUTTON, SPELL_CHECK_REPLY, PROTECT_CONTENT
+from datetime import datetime
 
 class Database:
     
@@ -26,6 +28,11 @@ class Database:
         return dict(
             id = id,
             title = title,
+            shortener_api= None, 
+            shortener_domain=None, 
+            access_days=0, 
+            last_verified=datetime(2020, 5, 17),
+            has_access=False,
             chat_status=dict(
                 is_disabled=False,
                 reason="",
@@ -41,8 +48,7 @@ class Database:
         return bool(user)
     
     async def total_users_count(self):
-        count = await self.col.count_documents({})
-        return count
+        return await self.col.count_documents({})
     
     async def remove_ban(self, id):
         ban_status = dict(
@@ -80,7 +86,6 @@ class Database:
         return b_users, b_chats
     
 
-
     async def add_chat(self, chat, title):
         chat = self.new_group(chat, title)
         await self.grp.insert_one(chat)
@@ -88,7 +93,7 @@ class Database:
 
     async def get_chat(self, chat):
         chat = await self.grp.find_one({'id':int(chat)})
-        return False if not chat else chat.get('chat_status')
+        return chat.get('chat_status') if chat else False
     
 
     async def re_enable_chat(self, id):
@@ -113,9 +118,7 @@ class Database:
             'template': IMDB_TEMPLATE
         }
         chat = await self.grp.find_one({'id':int(id)})
-        if chat:
-            return chat.get('settings', default)
-        return default
+        return chat.get('settings', default) if chat else default
     
 
     async def disable_chat(self, chat, reason="No Reason"):
@@ -127,8 +130,7 @@ class Database:
     
 
     async def total_chat_count(self):
-        count = await self.grp.count_documents({})
-        return count
+        return await self.grp.count_documents({})
     
 
     async def get_all_chats(self):
@@ -138,5 +140,36 @@ class Database:
     async def get_db_size(self):
         return (await self.db.command("dbstats"))['dataSize']
 
+
+    async def set_group_api(self, api, domain, group_id):
+        await self.grp.update_one({'id': group_id}, {'$set': {'shortener_api': api, "shortener_domain":domain}}, upsert=True)
+
+    async def update_existing_groups(self, filter, update):
+        return await self.grp.update_many(filter=filter,update=update)
+
+    async def find_chat(self, group_id):
+        return await self.grp.find_one({'id':int(group_id)})
+
+    async def filter_chat(self, value):
+        return self.grp.find(value)
+
+    async def is_group_verified(self, group_id):
+        group = await self.find_chat(group_id)
+        access_days = datetime.fromtimestamp(time.mktime(group["last_verified"].timetuple()) + group['access_days'])
+        return (access_days - datetime.now()).total_seconds() >= 0
+
+    async def expiry_date(self, group_id):
+        group = await self.find_chat(group_id)
+        access_days = datetime.fromtimestamp(time.mktime(group["last_verified"].timetuple()) + group['access_days'])
+        return access_days, int((access_days - datetime.now()).total_seconds())
+
+    async def total_premium_groups_count(self):
+        return await self.grp.count_documents({"has_access":True, "chat_status.is_disabled":False})
+
+    async def update_group_info(self, group_id, value:dict, tag="$set"):
+        group_id = int(group_id)
+        myquery = {"id": group_id}
+        newvalues = {tag : value }
+        await self.grp.update_one(myquery, newvalues)
 
 db = Database(DATABASE_URI, DATABASE_NAME)

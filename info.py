@@ -16,7 +16,7 @@ SESSION = environ.get('SESSION', 'Media_search')
 API_ID = int(environ['API_ID'])
 API_HASH = environ['API_HASH']
 BOT_TOKEN = environ['BOT_TOKEN']
-
+OWNER_ID = int(environ["OWNER_ID"])
 # Bot settings
 CACHE_TIME = int(environ.get('CACHE_TIME', 300))
 USE_CAPTION_FILTER = bool(environ.get('USE_CAPTION_FILTER', False))
@@ -39,6 +39,7 @@ COLLECTION_NAME = environ.get('COLLECTION_NAME', 'Telegram_files')
 
 # Others
 LOG_CHANNEL = int(environ.get('LOG_CHANNEL', 0))
+MEDIA_FORWARD_CHANNEL = int(environ.get('MEDIA_FORWARD_CHANNEL', 0))
 SUPPORT_CHAT = environ.get('SUPPORT_CHAT', 'TeamEvamaria')
 P_TTI_SHOW_OFF = is_enabled((environ.get('P_TTI_SHOW_OFF', "False")), False)
 IMDB = is_enabled((environ.get('IMDB', "True")), True)
@@ -55,6 +56,19 @@ MELCOW_NEW_USERS = is_enabled((environ.get('MELCOW_NEW_USERS', "True")), True)
 PROTECT_CONTENT = is_enabled((environ.get('PROTECT_CONTENT', "False")), False)
 PUBLIC_FILE_STORE = is_enabled((environ.get('PUBLIC_FILE_STORE', "True")), True)
 BOT_MODE = environ.get('BOT_MODE', "button").lower() # button or post
+VALIDITY = [int(i.strip()) for i in environ.get("VALIDITY").split(",")] if environ.get("VALIDITY") else [999999999,]
+
+SUBSCRIPTION_REMINDER_MESSAGE = """**Your subscription is gonna end soon. 
+    
+Renew your subscription to continue this service contact {owner}
+
+Details:
+Group ID: `{group_id}` {group_link}
+Subscription Date: {subscription_date}
+Expiry Date: {expiry_date}
+Subscription Peroid Remaining: {time_remaining}
+Banned: {banned_status}
+**"""
 
 LOG_STR = "Current Cusomized Configurations are:-\n" + (("IMDB Results are enabled, Bot will be showing imdb details for you queries.\n" if IMDB else "IMBD Results are disabled.\n"))
 LOG_STR += ("P_TTI_SHOW_OFF found , Users will be redirected to send /start to Bot PM instead of sending file file directly\n" if P_TTI_SHOW_OFF else "P_TTI_SHOW_OFF is disabled files will be send in PM, instead of sending start.\n")
