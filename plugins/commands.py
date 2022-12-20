@@ -1,3 +1,4 @@
+import contextlib
 import os
 import logging
 import random
@@ -216,7 +217,7 @@ async def start(client, message):
     files_ = await get_file_details(file_id)
     if not files_:
         pre, file_id = ((base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))).decode("ascii")).split("_", 1)
-        try:
+        with contextlib.suppress(Exception):
             msg = await client.send_cached_media(
                 chat_id=message.from_user.id,
                 file_id=file_id,
@@ -234,8 +235,6 @@ async def start(client, message):
                     return
             await msg.edit_caption(f_caption)
             return
-        except Exception:
-            pass
         return await message.reply('No such file exist.')
     files = files_[0]
     title = files.file_name
