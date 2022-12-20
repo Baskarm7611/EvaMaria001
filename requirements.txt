@@ -9,3 +9,5 @@ bs4
 imdbpy==2021.4.18
 python-dotenv
 aiohttp
+aiofiles
+shortzy
