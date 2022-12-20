@@ -148,6 +148,8 @@ class Database:
         return await self.grp.update_many(filter=filter,update=update)
 
     async def find_chat(self, group_id):
+        group = await self.grp.find_one({'id':int(group_id)})
+        group or await self.add_chat(group_id, "Custom Group")
         return await self.grp.find_one({'id':int(group_id)})
 
     async def filter_chat(self, value):

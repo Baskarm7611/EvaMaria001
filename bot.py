@@ -15,7 +15,7 @@ from pyrogram import Client, __version__
 from pyrogram.raw.all import layer
 from database.ia_filterdb import Media
 from database.users_chats_db import db
-from info import SESSION, API_ID, API_HASH, BOT_TOKEN, LOG_STR
+from info import RESUME_BROADCAST, SESSION, API_ID, API_HASH, BOT_TOKEN, LOG_STR
 from utils import _update_existing_users, temp
 from typing import Union, Optional, AsyncGenerator
 from pyrogram import types
@@ -55,12 +55,12 @@ class Bot(Client):
         await web.TCPSite(app, bind_address, 8000).start()
         logging.info("Web Server Started")
         
-        
-        ongoing_broadcast = await filter_broadcast({"ongoing":True})
-        logging.info("Resuming Broadcast....")
-        for broadcast in ongoing_broadcast:
-            await resume_broadcast(self, broadcast["broadcast_id"])
-        
+        if RESUME_BROADCAST:
+            ongoing_broadcast = await filter_broadcast({"ongoing":True})
+            logging.info("Resuming Broadcast....")
+            for broadcast in ongoing_broadcast:
+                await resume_broadcast(self, broadcast["broadcast_id"])
+            
     async def stop(self, *args):
         await super().stop()
         logging.info("Bot stopped. Bye.")

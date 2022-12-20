@@ -57,7 +57,7 @@ PROTECT_CONTENT = is_enabled((environ.get('PROTECT_CONTENT', "False")), False)
 PUBLIC_FILE_STORE = is_enabled((environ.get('PUBLIC_FILE_STORE', "True")), True)
 BOT_MODE = environ.get('BOT_MODE', "button").lower() # button or post
 VALIDITY = [int(i.strip()) for i in environ.get("VALIDITY").split(",")] if environ.get("VALIDITY") else [999999999,]
-
+RESUME_BROADCAST = is_enabled(environ.get("RESUME_BROADCAST", "True"), True)
 SUBSCRIPTION_REMINDER_MESSAGE = """**Your subscription is gonna end soon. 
     
 Renew your subscription to continue this service contact {owner}

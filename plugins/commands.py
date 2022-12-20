@@ -14,6 +14,7 @@ from database.connections_mdb import active_connection
 import re
 import json
 import base64
+from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid
 logger = logging.getLogger(__name__)
 
 BATCH_FILES = {}
@@ -594,10 +595,15 @@ async def premium_group_cmd(bot: Client, m):
     total_premium_groups = await db.total_premium_groups_count()
     text = f"List of premium groups - Total {total_premium_groups} groups\n\n"
     bin_text = ""
+
     async for group in premium_groups:
-        if is_premium_group(group["id"]):
-            tg_group = await bot.get_chat(group["id"])
-            bin_text += "~ `{group_id}` {group_link}\n".format(group_id=group["id"], group_link=tg_group.invite_link)
+        try:
+            if is_premium_group(group["id"]):
+                tg_group = await bot.get_chat(group["id"])
+                bin_text += "~ `{group_id}` {group_link}\n".format(group_id=group["id"], group_link=tg_group.invite_link)
+        except Exception as e:
+            logger.error(e)
+
     bin_text = bin_text or "None"
     await m.reply(text+bin_text)
 
@@ -616,11 +622,19 @@ async def myplan_cmd_handler(bot, m):
         btn = await get_group_info_button(group_id)
         text = await get_group_info_text(bot, group_id)
         await m.reply(text, reply_markup=InlineKeyboardMarkup(btn) if m.from_user.id in ADMINS else None)
+
+    except ChannelInvalid:
+        await m.reply("Bot is not a admin of given group")
+        return
+        
     except Exception as e:
-        logger.error(e)
+        logger.error(e, exc_info=True)
 
 
 @Client.on_message(filters.command('request') & filters.group)
 async def request_cmd_handler(bot: Client, m):
+    if not await group_admin_check(client=bot, message=m, userid=m.from_user.id):
+        return
+        
     owner= (await bot.get_users(OWNER_ID)).mention 
     await m.reply(f"Contact {owner} to get access")
