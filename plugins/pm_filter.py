@@ -32,9 +32,12 @@ SPELL_CHECK = {}
 
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
-    k = await manual_filters(client, message)
-    if k == False:
-        await auto_filter(client, message)
+    try:
+        k = await manual_filters(client, message)
+        if k == False:
+            await auto_filter(client, message)
+    except Exception as e:
+        logger.error(e, exc_info=True)
 
 
 @Client.on_callback_query(filters.regex('^validity'))
