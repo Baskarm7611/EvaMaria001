@@ -167,7 +167,7 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
                     continue
 
                 # forward to log channel before saving in database
-                await message.copy(MEDIA_FORWARD_CHANNEL)
+                await message.copy(MEDIA_FORWARD_CHANNEL) if MEDIA_FORWARD_CHANNEL else None
 
                 media = getattr(message, message.media.value, None)
                 if not media:
